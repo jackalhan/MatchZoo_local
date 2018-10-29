@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from keras import backend as K
 
 def unchanged_shape(input_shape):
     "Function for Lambda layer"
@@ -22,17 +23,9 @@ def submult(input_1, input_2):
     return out_
 
 
-def dual_attention_alignment(tensor_left, tensor_right):
-    "Align text representation with neural soft attention"
-    attention = Dot(axes=-1)([input_1, input_2])
-    w_att_1 = Lambda(lambda x: softmax(x, axis=1),
-                     output_shape=unchanged_shape)(attention)
-    w_att_2 = Permute((2,1))(Lambda(lambda x: softmax(x, axis=2),
-                             output_shape=unchanged_shape)(attention))
-    in1_aligned = Dot(axes=1)([w_att_1, input_1])
-    in2_aligned = Dot(axes=1)([w_att_2, input_2])
-    return in1_aligned, in2_aligned
-
+#================================================================================
+# without mask version
+#================================================================================
 
 def dot_attention(self, tensor_left, tensor_right):
     """
@@ -45,13 +38,30 @@ def dot_attention(self, tensor_left, tensor_right):
     return K.permute_dimensions(attn_weights, (0, 2, 1))
 
 
-def soft_alignment(self, attention_weight, tensor_to_align):
+def fc_attention(self, tensor_left, tensor_rights):
+    """
+    Compute the attention between elements of two sentences with the fully-connected network.
+    """
+    tensor_left = K.expand_dims(tensor_left, axis=2)
+    tensor_right = K.expand_dims(tensor_right, axis=1)
+    tensor_left = K.repeat_elements(tensor_left, tensor_right.shape[2], 2)
+    tensor_right = K.repeat_elements(tensor_right, tensor_left.shape[1], 1)
+    tensor_merged = K.concatenate([tensor_left, tensor_right], axis=-1)
+    middle_output = Dense(128, activation='tanh')(tensor_merged)
+    attn_weights = Dense(128)(tensor_merged)
+    attn_weights = K.squeeze(attn_weights)
+
+    return attn_weights
+
+
+def soft_alignment(self, attn_weights, tensor_to_align):
     """
     Compute the soft alignment.
     """
     # Subtract the max. from the attention weights to avoid overflows.
-    exp = K.exp(attention_weight - K.max(attention_weight, axis=-1, keepdims=True))
+    exp = K.exp(attn_weights - K.max(attn_weights, axis=-1, keepdims=True))
     exp_sum = K.sum(exp, axis=-1, keepdims=True)
     softmax = exp / exp_sum
 
     return K.batch_dot(softmax, tensor_to_align)
+
