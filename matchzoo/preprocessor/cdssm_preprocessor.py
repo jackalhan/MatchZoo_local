@@ -6,6 +6,7 @@ import itertools
 
 import numpy as np
 from tqdm import tqdm
+from scipy import sparse
 
 from matchzoo import utils
 from matchzoo import engine
@@ -155,7 +156,8 @@ class CDSSMPreprocessor(engine.BasePreprocessor):
             text = list(itertools.chain(*text))
             text = fix_unit.transform(text)
             text = np.reshape(text, (self._text_length, -1))
-            self.datapack.left.at[idx, 'text_left'] = text.tolist()
+            text = sparse.csr_matrix(text)
+            self.datapack.left.at[idx, 'text_left'] = text
 
         for idx, row in tqdm(self.datapack.right.iterrows()):
             text = row.text_right
@@ -166,6 +168,7 @@ class CDSSMPreprocessor(engine.BasePreprocessor):
             text = list(itertools.chain(*text))
             text = fix_unit.transform(text)
             text = np.reshape(text, (self._text_length, -1))
-            self.datapack.right.at[idx, 'text_right'] = text.tolist()
+            text = sparse.csr_matrix(text)
+            self.datapack.right.at[idx, 'text_right'] = text
 
         return self.datapack

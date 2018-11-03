@@ -1,13 +1,14 @@
 """Matchzoo list generator."""
 
+import typing
+import numpy as np
+import pandas as pd
+from scipy import sparse
+
 from matchzoo import engine
 from matchzoo import datapack
 from matchzoo import utils
 from matchzoo import tasks
-
-import pandas as pd
-import numpy as np
-import typing
 
 
 class ListGenerator(engine.BaseGenerator):
@@ -128,6 +129,8 @@ class ListGenerator(engine.BaseGenerator):
             batch_x[column] = self._right.loc[id_right, column].tolist()
 
         for key, val in batch_x.items():
+            if isinstance(val, list) and sparse.issparse(val[0]):
+                val = [v.toarray() for v in val]
             batch_x[key] = np.array(val)
 
         batch_x = utils.dotdict(batch_x)
