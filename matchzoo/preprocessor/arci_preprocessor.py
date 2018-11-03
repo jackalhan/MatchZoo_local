@@ -11,11 +11,12 @@ from matchzoo import engine
 from matchzoo import datapack
 from matchzoo import preprocessor
 from matchzoo.embedding import Embedding
+from . import segment
 
 logger = logging.getLogger(__name__)
 
 
-class ArcIPreprocessor(engine.BasePreprocessor, preprocessor.SegmentMixin):
+class ArcIPreprocessor(engine.BasePreprocessor):
     """
     ArcI preprocessor helper.
 
@@ -43,7 +44,9 @@ class ArcIPreprocessor(engine.BasePreprocessor, preprocessor.SegmentMixin):
 
     """
 
-    def __init__(self, fixed_length: list=[32, 32], embedding_file: str=''):
+    def __init__(self,
+                 fixed_length: list = [32, 32],
+                 embedding_file: str = ''):
         """Initialization."""
         self.datapack = None
         self._embedding_file = embedding_file
@@ -76,7 +79,7 @@ class ArcIPreprocessor(engine.BasePreprocessor, preprocessor.SegmentMixin):
         logger.info("Start building vocabulary & fitting parameters.")
 
         # Convert user input into a datapack object.
-        self.datapack = self.segment(inputs, stage='train')
+        self.datapack = segment(inputs, stage='train')
 
         # Loop through user input to generate words.
         # 1. Used for build vocabulary of words (get dimension).
@@ -133,7 +136,7 @@ class ArcIPreprocessor(engine.BasePreprocessor, preprocessor.SegmentMixin):
         :return: Transformed data as :class:`DataPack` object.
         """
         if stage in ['evaluate', 'predict']:
-            self.datapack = self.segment(inputs, stage=stage)
+            self.datapack = segment(inputs, stage=stage)
 
         logger.info(f"Start processing input data for {stage} stage.")
 

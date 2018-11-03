@@ -104,7 +104,7 @@ class StopRemovalUnit(ProcessorUnit):
         <class 'list'>
     """
 
-    def __init__(self, lang: str='english'):
+    def __init__(self, lang: str = 'english'):
         """Initialization."""
         self._lang = lang
         self._stop = nltk.corpus.stopwords.words(self._lang)
@@ -197,7 +197,7 @@ class NgramLetterUnit(ProcessorUnit):
 
     """
 
-    def transform(self, tokens: list, ngram: int=3) -> list:
+    def transform(self, tokens: list, ngram: int = 3) -> list:
         """
         Transform token into tri-letter.
 
@@ -346,53 +346,6 @@ class WordHashingUnit(ProcessorUnit):
         return hashing
 
 
-class SlidingWindowUnit(ProcessorUnit):
-    """
-    SlidingWindowUnit class.
-
-    Used to get information from a window sliding
-    through the input data.
-
-    Examples:
-        >>> data = [[0,0,0],[1,1,1],[2,2,2],[3,3,3]]
-        >>> sliding = SlidingWindowUnit()
-        >>> output = sliding.transform(data)
-        >>> len(output)
-        2
-        >>> output[0]
-        [0, 0, 0, 1, 1, 1, 2, 2, 2]
-
-    """
-
-    def __init__(self, sliding_window: int=3):
-        """
-        Class initialization.
-
-        :param sliding_window: sliding window length.
-        """
-        self._sliding_window = sliding_window
-
-    def transform(self, inputs: list) -> list:
-        """
-        Compute the result of a window sliding through input data.
-
-        For short inputs that can not fill :attr:`sliding_window`, the
-        unit return an empty array.
-
-        :param inputs: sequential input data.
-        :return: window sliding result.
-        """
-        output = []
-        inputs = np.array(inputs)
-        if len(inputs.shape) == 1:
-            inputs = np.expand_dims(inputs, -1)
-        while len(inputs) >= self._sliding_window:
-            output.append(np.concatenate(
-                inputs[:self._sliding_window], axis=-1).tolist())
-            inputs = inputs[1:]
-        return output
-
-
 class FixedLengthUnit(ProcessorUnit):
     """
     FixedLengthUnit Class.
@@ -409,8 +362,8 @@ class FixedLengthUnit(ProcessorUnit):
 
     """
 
-    def __init__(self, text_length: int, pad_value: int=0,
-                 pad_mode: str='pre', truncate_mode: str='pre'):
+    def __init__(self, text_length: int, pad_value: int = 0,
+                 pad_mode: str = 'pre', truncate_mode: str = 'pre'):
         """
         Class initialization.
 
