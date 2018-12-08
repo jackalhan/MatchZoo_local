@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname), encoding='utf').read()
 
-
+#test
 setup(
     name="MatchZoo",
     version="0.2.0",
