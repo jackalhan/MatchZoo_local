@@ -11,12 +11,14 @@ import numpy
 numpy.random.seed(49999)
 import tensorflow
 tensorflow.set_random_seed(49999)
-
+import matplotlib.pyplot as plt
 from collections import OrderedDict
+import atexit
 
 import keras
 import keras.backend as K
 from keras.models import Sequential, Model
+#from keras.callbacks import TensorBoard
 
 from utils import *
 import inputs
@@ -27,6 +29,53 @@ from optimizers import *
 config = tensorflow.ConfigProto()
 config.gpu_options.allow_growth = True
 sess = tensorflow.Session(config = config)
+stats_for_plots = dict()
+logs_dir = None
+from tensorflow.keras.callbacks import TensorBoard
+from tensorflow.python.eager import context
+
+class TrainValTensorBoard(TensorBoard):
+    def __init__(self, log_dir='./logs', global_step=0, **kwargs):
+        self.val_log_dir = os.path.join(log_dir, 'validation')
+        training_log_dir = os.path.join(log_dir, 'training')
+        super(TrainValTensorBoard, self).__init__(training_log_dir, **kwargs)
+        self.global_step = global_step
+    def set_model(self, model):
+        if context.executing_eagerly():
+            self.val_writer = tf.contrib.summary.create_file_writer(self.val_log_dir)
+        else:
+            self.val_writer = tf.summary.FileWriter(self.val_log_dir)
+        super(TrainValTensorBoard, self).set_model(model)
+
+    def _write_custom_summaries(self, step, logs=None):
+
+        #if self._total_batches_seen == 0:
+        step += self.global_step
+        logs = logs or {}
+        val_logs = {k.replace('val_', ''): v for k, v in logs.items() if 'val_' in k}
+        # print("Step: {}".format(step))
+        #print("Current Total Batch Seen/Step For TRAIN: {}/{}".format( self._total_batches_seen, step))
+
+        if context.executing_eagerly():
+            with self.val_writer.as_default(), tf.contrib.summary.always_record_summaries():
+                for name, value in val_logs.items():
+                    tf.contrib.summary.scalar(name, value.item(), step=step)
+        else:
+            for name, value in val_logs.items():
+                #print("Current Total Batch Seen/Step For TEST: {}/{}".format(self._total_batches_seen, step))
+                summary = tf.Summary()
+                summary_value = summary.value.add()
+                summary_value.simple_value = value.item()
+                summary_value.tag = name
+                self.val_writer.add_summary(summary, step)
+        self.val_writer.flush()
+
+        logs = {k: v for k, v in logs.items() if not 'val_' in k}
+        super(TrainValTensorBoard, self)._write_custom_summaries(step, logs)
+
+    def on_train_end(self, logs=None):
+        super(TrainValTensorBoard, self).on_train_end(logs)
+        self.val_writer.close()
 
 def load_model(config):
     global_conf = config["global"]
@@ -52,6 +101,12 @@ def train(config):
     optimizer=optimizers.get(optimizer)
     K.set_value(optimizer.lr, global_conf['learning_rate'])
     weights_file = str(global_conf['weights_file']) + '.%d'
+
+    global logs_dir
+    logs_dir = str(global_conf['logs'])
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
+
     display_interval = int(global_conf['display_interval'])
     num_iters = int(global_conf['num_iters'])
     save_weights_iters = int(global_conf['save_weights_iters'])
@@ -76,6 +131,7 @@ def train(config):
     # list all input tags and construct tags config
     input_train_conf = OrderedDict()
     input_eval_conf = OrderedDict()
+    input_eval_loss_conf = OrderedDict()
     for tag in input_conf.keys():
         if 'phase' not in input_conf[tag]:
             continue
@@ -83,11 +139,18 @@ def train(config):
             input_train_conf[tag] = {}
             input_train_conf[tag].update(share_input_conf)
             input_train_conf[tag].update(input_conf[tag])
+            stats_for_plots[tag + '_loss'] = dict()
         elif input_conf[tag]['phase'] == 'EVAL':
             input_eval_conf[tag] = {}
             input_eval_conf[tag].update(share_input_conf)
             input_eval_conf[tag].update(input_conf[tag])
-    print('[Input] Process Input Tags. %s in TRAIN, %s in EVAL.' % (input_train_conf.keys(), input_eval_conf.keys()), end='\n')
+            stats_for_plots[tag] = dict()
+        elif input_conf[tag]['phase'] == 'EVAL_LOSS':
+            input_eval_loss_conf[tag] = {}
+            input_eval_loss_conf[tag].update(share_input_conf)
+            input_eval_loss_conf[tag].update(input_conf[tag])
+            stats_for_plots[tag] = dict()
+    print('[Input] Process Input Tags. %s in TRAIN, %s in EVAL, %s in EVAL_LOSS.' % (input_train_conf.keys(), input_eval_conf.keys(), input_eval_loss_conf.keys()), end='\n')
 
     # collect dataset identification
     dataset = {}
@@ -107,6 +170,7 @@ def train(config):
     # initial data generator
     train_gen = OrderedDict()
     eval_gen = OrderedDict()
+    eval_loss_gen = OrderedDict()
 
     for tag, conf in input_train_conf.items():
         print(conf, end='\n')
@@ -122,6 +186,14 @@ def train(config):
         generator = inputs.get(conf['input_type'])
         eval_gen[tag] = generator( config = conf )
 
+    for tag, conf in input_eval_loss_conf.items():
+        print(conf, end='\n')
+        conf['data1'] = dataset[conf['text1_corpus']]
+        conf['data2'] = dataset[conf['text2_corpus']]
+        generator = inputs.get(conf['input_type'])
+        eval_loss_gen[tag] = generator(config=conf)
+
+
     ######### Load Model #########
     model = load_model(config)
 
@@ -131,6 +203,9 @@ def train(config):
             loss.append(rank_losses.get(lobj['object_name'])(lobj['object_params']))
         else:
             loss.append(rank_losses.get(lobj['object_name']))
+        for k, v in stats_for_plots.items():
+            if 'loss' in k:
+                stats_for_plots[k][lobj['object_name']] = []
     eval_metrics = OrderedDict()
     for mobj in config['metrics']:
         mobj = mobj.lower()
@@ -139,27 +214,51 @@ def train(config):
             eval_metrics[mobj] = metrics.get(mt_key)(int(mt_val))
         else:
             eval_metrics[mobj] = metrics.get(mobj)
+        for k, v in stats_for_plots.items():
+            if 'loss' not in k:
+                stats_for_plots[k][mobj] = []
     model.compile(optimizer=optimizer, loss=loss)
     print('[Model] Model Compile Done.', end='\n')
 
     for i_e in range(num_iters):
         for tag, generator in train_gen.items():
             genfun = generator.get_batch_generator()
-            print('[%s]\t[Train:%s] ' % (time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time())), tag), end='')
+            evalfun =eval_loss_gen['test_loss'].get_batch_generator()
+            print('*' * 100)
+
             history = model.fit_generator(
                     genfun,
                     steps_per_epoch = display_interval,
                     epochs = 1,
                     shuffle=False,
-                    verbose = 0
+                    verbose = 0,
+                    validation_data=evalfun,
+                    validation_steps=display_interval,
+                    callbacks=[TrainValTensorBoard(log_dir=os.path.join(logs_dir, 'tensorboard'),
+                                                   global_step=display_interval * i_e,
+                                                   write_graph=False
+                                                   )]
                 ) #callbacks=[eval_map])
-            print('Iter:%d\tloss=%.6f' % (i_e, history.history['loss'][0]), end='\n')
+            for k, v in stats_for_plots.items():
+                if 'loss' in k:
+                    print('[%s]\t[Train:%s] ' % (time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time())), k),
+                          end='')
+                    if any(srchstr in k for srchstr in ('test','val','valid')):
+                        _l = history.history['val_loss'][0]
+                        stats_for_plots[k][lobj['object_name']].append(_l)
+                    else:
+                        _l = history.history['loss'][0]
+                        stats_for_plots[k][lobj['object_name']].append(_l)
+                    print('Iter:%d\t Loss =%.6f' % (i_e, _l), end='\n')
+            print('-' * 50)
 
         for tag, generator in eval_gen.items():
             genfun = generator.get_batch_generator()
             print('[%s]\t[Eval:%s] ' % (time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time())), tag), end='')
             res = dict([[k,0.] for k in eval_metrics.keys()])
             num_valid = 0
+            #history_eval = model.evaluate_generator(genfun, steps=1)
+            #print("history_eval: {}".format(history_eval))
             for input_data, y_true in genfun:
                 y_pred = model.predict(input_data, batch_size=len(y_true))
                 if issubclass(type(generator), inputs.list_generator.ListBasicGenerator):
@@ -175,10 +274,91 @@ def train(config):
                         res[k] += eval_func(y_true = y_true, y_pred = y_pred)
                     num_valid += 1
             generator.reset()
+            for k, v in res.items():
+                stats_for_plots[tag][k].append(v/num_valid)
+
             print('Iter:%d\t%s' % (i_e, '\t'.join(['%s=%f'%(k,v/num_valid) for k, v in res.items()])), end='\n')
             sys.stdout.flush()
         if (i_e+1) % save_weights_iters == 0:
             model.save_weights(weights_file % (i_e+1))
+    export_loss(False, 1)
+    export_metrics(False, 1)
+def exit_handler():
+    if len(stats_for_plots) > 0:
+        # pass
+        export_loss(False, 2)
+        export_metrics(False, 2)
+
+def export_loss(is_terminated, verbose):
+    legend = []
+    data = []
+    for k, v in stats_for_plots.items():
+        if 'loss' in k:
+            for loss in v:
+                data.append(v[loss])
+                legend.append(k)
+    if verbose == 1 or verbose == 3:
+        for d in data:
+            plt.plot(d)
+        plt.title('Train-Test {}'.format(loss))
+        plt.ylabel("{}".format(loss))
+        plt.xlabel("Iterations over Whole Dataset")
+        plt.legend(legend, loc='upper right')
+        plt.grid()
+        name = os.path.join(logs_dir, 'train_test_loss_plt_{}.png'.format(time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time()))))
+        fig = plt.gcf()
+        if not is_terminated:
+            fig.savefig(name)
+            plt.show()
+            fig.savefig(name)
+            plt.close()
+            plt.clf()
+        else:
+            plt.show()
+            plt.close()
+            plt.clf()
+    elif verbose == 2 or verbose == 3:
+        data = np.asarray(data)
+        data = np.transpose(data)
+        name = os.path.join(logs_dir, 'train_test_loss_{}.csv'.format(
+                                                                time.strftime('%m-%d-%Y %H:%M:%S',
+                                                                              time.localtime(time.time()))))
+        np.savetxt(name, data, delimiter=',', header=','.join(legend))  # X is an array
+
+    print('{} is exported.'.format(name))
+def export_metrics(is_terminated, verbose):
+    for k, v in stats_for_plots.items():
+        if 'loss' not in k:
+            for metric in v:
+                if verbose == 1 or verbose == 3:
+                    plt.plot(v[metric])
+                    plt.title('{}: {}'.format(k, metric))
+                    plt.ylabel("{}".format(metric))
+                    plt.xlabel("Iterations over Whole Dataset")
+                    plt.legend(k, loc='upper right')
+                    plt.grid()
+                    name = os.path.join(logs_dir, '{}_{}_plt_{}.png'.format(k, metric, time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time()))))
+                    fig = plt.gcf()
+                    if not is_terminated:
+                        fig.savefig(name)
+                        plt.show()
+                        fig.savefig(name)
+                        plt.close()
+                        plt.clf()
+                        print('{} is exported.'.format(name))
+                    else:
+                        plt.show()
+                        # plt.close()
+                        plt.clf()
+                elif verbose == 2 or verbose == 3:
+
+                    name = os.path.join(logs_dir, '{}_{}_{}.csv'.format(k, metric,
+                                                                            time.strftime('%m-%d-%Y %H:%M:%S',
+                                                                                          time.localtime(time.time()))))
+                    np.savetxt(name, v[metric], delimiter=',', header=metric)  # X is an array
+                print('{} is exported.'.format(name))
+
+atexit.register(exit_handler)
 
 def predict(config):
     ######## Read input config ########

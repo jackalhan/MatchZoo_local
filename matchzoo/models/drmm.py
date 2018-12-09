@@ -44,7 +44,7 @@ class DRMM(BasicModel):
         doc = Input(name='doc', shape=(self.config['text1_maxlen'], self.config['hist_size']))
         show_layer_info('Input', doc)
 
-        embedding = Embedding(self.config['vocab_size'], self.config['embed_size'], weights=[self.config['embed']], trainable = False)
+        embedding = Embedding(self.config['vocab_size'], self.config['embed_size'], weights=[self.config['embed']], trainable = self.config['train_embed'])
 
         q_embed = embedding(query)
         show_layer_info('Embedding', q_embed)

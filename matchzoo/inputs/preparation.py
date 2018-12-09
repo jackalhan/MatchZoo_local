@@ -31,10 +31,12 @@ class Preparation(object):
             hashid[hex_dig] = tid
             return tid
 
-    def parse_line(self, line, delimiter='\t'):
+    def parse_line(self, line, delimiter='\t', indx=None):
         subs = line.split(delimiter)
         # print('subs: ', len(subs))
         if 3 != len(subs):
+            print(indx)
+            print(line)
             raise ValueError('format of data file wrong, should be \'label,text1,text2\'.')
         else:
             return subs[0], subs[1], subs[2]
@@ -75,10 +77,10 @@ class Preparation(object):
         corpus = {}
         rels = []
         f = codecs.open(file_path, 'r', encoding='utf8')
-        for line in f:
+        for indx, line in enumerate(f, start=1):
             line = line
             line = line.strip()
-            label, t1, t2 = self.parse_line(line)
+            label, t1, t2 = self.parse_line(line, indx=indx)
             id1 = self.get_text_id(hashid, t1, 'T')
             id2 = self.get_text_id(hashid, t2, 'T')
             corpus[id1] = t1
