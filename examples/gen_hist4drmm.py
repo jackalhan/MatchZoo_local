@@ -15,13 +15,10 @@ if __name__ == '__main__':
     embedfile = srcdir + 'embed_glove_d300_norm'
     corpusfile = srcdir + 'corpus_preprocessed.txt'
 
-    relfiles = [ srcdir + 'relation_train.txt',
-            srcdir + 'relation_valid.txt',
+    relfiles = [
             srcdir + 'relation_test.txt'
             ]
     histfiles = [
-            srcdir + 'relation_train.hist-%d.txt' % hist_size,
-            srcdir + 'relation_valid.hist-%d.txt' % hist_size,
             srcdir + 'relation_test.hist-%d.txt' % hist_size
             ]
     embed_dict = read_embedding(filename = embedfile)
