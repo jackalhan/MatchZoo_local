@@ -1,5 +1,6 @@
 #!/bin/bash
 path="/home/jackalhan/Development/github/MatchZoo/examples/squad/dev_no_lower_no_filter/"
+sample="$pathsample.txt"
 glove="$pathglove.840B.300d.txt"
 word_dict="$pathword_dict.txt"
 embed_glove="$pathembed_glove_d300"
