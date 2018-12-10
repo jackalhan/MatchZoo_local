@@ -33,7 +33,7 @@ class Preprocess(object):
         # set default configuration
         self._word_seg_config = { 'enable': True, 'lang': 'en' }
         self._doc_filter_config = { 'enable': True, 'min_len': 0, 'max_len': six.MAXSIZE }
-        self._word_stem_config = { 'enable': True }
+        self._word_stem_config = { 'enable': False }
         self._word_lower_config = { 'enable': False }
         self._word_filter_config = { 'enable': False, 'stop_words': nltk_stopwords.words('english'),
                                      'min_freq': 1, 'max_freq': six.MAXSIZE, 'words_useless': None }
