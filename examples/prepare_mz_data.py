@@ -45,7 +45,7 @@ def filter_triletter(tri_stats, min_filter_num=5, max_filter_num=10000):
 
 if __name__ == '__main__':
     prepare = Preparation()
-    srcdir = sys.argv[2]
+    srcdir = sys.argv[1]
     dstdir = srcdir
 
     word_dict_input = dstdir + 'word_dict.txt'
