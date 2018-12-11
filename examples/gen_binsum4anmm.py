@@ -15,7 +15,7 @@ from rank_io import *
 
 if __name__ == '__main__':
     bin_num = int(sys.argv[1])
-    srcdir = './'
+    srcdir = sys.argv[2]
     embedfile = srcdir + 'embed_glove_d300_norm'
     corpusfile = srcdir + 'corpus_preprocessed.txt'
 
