@@ -11,7 +11,7 @@ sys.path.append('../matchzoo/utils/')
 sys.path.append('../matchzoo/inputs/')
 from preprocess import cal_binsum
 from rank_io import *
-
+from tqdm import tqdm
 
 if __name__ == '__main__':
     bin_num = int(sys.argv[1])
@@ -38,11 +38,11 @@ if __name__ == '__main__':
 
     corpus, _ = read_data(corpusfile)
     print('read corpus finished....')
-    for idx, relfile in enumerate(relfiles):
+    for idx, relfile in tqdm(enumerate(relfiles)):
         binfile = binfiles[idx]
         rel = read_relation(relfile)
         fout = open(binfile, 'w')
-        for label, d1, d2 in rel:
+        for label, d1, d2 in tqdm(rel):
             assert d1 in corpus
             assert d2 in corpus
             qnum = len(corpus[d1])
